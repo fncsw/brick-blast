@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Safe Brick Breaker - Mobile Friendly</title>
+    <style>
+        body {
+            background-color: #111;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none; 
+        }
+        h1 { margin-bottom: 5px; font-size: 24px; letter-spacing: 2px; }
+        canvas {
+            background: #222;
+            border: 4px solid #fff;
+            box-shadow: 0 0 20px rgba(255,255,255,0.1);
+            max-width: 95vw; 
+            max-height: 70vh;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>BRICK BREAKER</h1>
+    <canvas id="gameCanvas" width="480" height="320"></canvas>
+    <div style="margin-top:15px; color:#aaa; font-size:13px; text-align: center; padding: 0 10px;">
+        Slide your finger or mouse to move. Tap a level to start.
+    </div>
+
+<script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let gameState = "MENU";
+    let currentDifficulty = "NORMAL";
+
+    let ballRadius = 8;
+    let x = 240, y = 290, dx = 3, dy = -3, score = 0, bricks = [];
+    let paddleHeight = 10, paddleWidth = 75, paddleX = 202;
+
+    let brickWidth = 75, brickHeight = 15, brickPadding = 10, brickOffsetTop = 40, brickOffsetLeft = 30;
+    let brickRowCount = 3, brickColumnCount = 5;
+
+    const buttons = [
+        { text: "EASY", x: 70, y: 150, w: 150, h: 40, speed: 2.5, pad: 100, rows: 2, cols: 5 },
+        { text: "NORMAL", x: 260, y: 150, w: 150, h: 40, speed: 4, pad: 75, rows: 3, cols: 5 },
+        { text: "HARD", x: 70, y: 210, w: 150, h: 40, speed: 5.5, pad: 55, rows: 4, cols: 5 },
+        { text: "ARCADE", x: 260, y: 210, w: 150, h: 40, speed: 3.5, pad: 70, rows: 4, cols: 5 }
+    ];
+
+    function initGame(button) {
+        currentDifficulty = button.text;
+        paddleWidth = button.pad;
+        brickRowCount = button.rows;
+        brickColumnCount = button.cols;
+        brickOffsetLeft = (canvas.width - ((brickWidth + brickPadding) * brickColumnCount - brickPadding)) / 2;
+
+        x = canvas.width / 2;
+        y = canvas.height - 30;
+        dx = (Math.random() > 0.5 ? 1 : -1) * button.speed;
+        dy = -button.speed;
+        paddleX = (canvas.width - paddleWidth) / 2;
+        score = 0;
+
+        bricks = [];
+        for (let c = 0; c < brickColumnCount; c++) {
+            bricks[c] = [];
+            for (let r = 0; r < brickRowCount; r++) {
+                bricks[c][r] = { x: 0, y: 0, status: 1 };
+            }
+        }
+        gameState = "PLAYING";
+    }
+
+    // --- Repaired Input System ---
+    document.addEventListener("mousemove", mouseMoveHandler, false);
+    document.addEventListener("touchmove", touchMoveHandler, { passive: false });
+    canvas.addEventListener("click", clickHandler, false);
+    canvas.addEventListener("touchstart", touchStartHandler, { passive: false });
+
+    function handleMove(clientX) {
+        let rect = canvas.getBoundingClientRect();
+        let scaleX = canvas.width / rect.width; 
+        let relativeX = (clientX - rect.left) * scaleX;
+        
+        if (relativeX > 0 && relativeX < canvas.width) {
+            paddleX = relativeX - paddleWidth / 2;
+        }
+    }
+
+    function mouseMoveHandler(e) {
+        handleMove(e.clientX);
+    }
+
+    function touchMoveHandler(e) {
+        if (e.touches.length > 0) {
+            e.preventDefault(); 
+            handleMove(e.touches[0].clientX); // FIXED: Added finger selector [0]
+        }
+    }
+
+    function handleAction(clientX, clientY) {
+        let rect = canvas.getBoundingClientRect();
+        let scaleX = canvas.width / rect.width;
+        let scaleY = canvas.height / rect.height;
+        
+        let clickX = (clientX - rect.left) * scaleX;
+        let clickY = (clientY - rect.top) * scaleY;
+
+        if (gameState === "MENU") {
+            for (let btn of buttons) {
+                if (clickX > btn.x && clickX < btn.x + btn.w && clickY > btn.y && clickY < btn.y + btn.h) {
+                    initGame(btn);
+                    break;
+                }
+            }
+        } else if (gameState === "GAMEOVER" || gameState === "WIN") {
+            gameState = "MENU";
+        }
+    }
+
+    function clickHandler(e) {
+        handleAction(e.clientX, e.clientY);
+    }
+
+    function touchStartHandler(e) {
+        if (e.touches.length > 0) {
+            e.preventDefault();
+            handleAction(e.touches[0].clientX, e.touches[0].clientY); // FIXED: Added finger selector [0]
+        }
+    }
+
+    function collisionDetection() {
+        for (let c = 0; c < brickColumnCount; c++) {
+            for (let r = 0; r < brickRowCount; r++) {
+                let b = bricks[c][r];
+                if (b.status === 1) {
+                    if (x > b.x && x < b.x + brickWidth && y > b.y && y < b.y + brickHeight) {
+                        dy = -dy;
+                        b.status = 0;
+                        score++;
+                        if (currentDifficulty === "ARCADE") {
+                            dx *= 1.05;
+                            dy *= 1.05;
+                        }
+                        if (score === brickRowCount * brickColumnCount) {
+                            gameState = "WIN";
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    function drawMenu() {
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#fff";
+        ctx.font = "22px Arial";
+        ctx.fillText("Select Difficulty Mode", canvas.width / 2, 80);
+
+        for (let btn of buttons) {
+            ctx.fillStyle = "#333";
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 2;
+            ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+            ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
+
+            if (btn.text === "EASY") ctx.fillStyle = "#4CAF50";
+            else if (btn.text === "NORMAL") ctx.fillStyle = "#2196F3";
+            else if (btn.text === "HARD") ctx.fillStyle = "#F44336";
+            else ctx.fillStyle = "#E91E63";
+
+            ctx.font = "bold 14px Arial";
+            ctx.fillText(btn.text, btn.x + btn.w / 2, btn.y + 25);
+        }
+    }
+
+    function drawBall() {
+        ctx.beginPath();
+        ctx.arc(x, y, ballRadius, 0, Math.PI * 2);
+        ctx.fillStyle = currentDifficulty === "ARCADE" ? "#E91E63" : "#0095DD";
+        ctx.fill();
+        ctx.closePath();
+    }
+
+    function drawPaddle() {
+        ctx.beginPath();
+        ctx.rect(paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
+        ctx.fillStyle = "#fff";
+        ctx.fill();
+        ctx.closePath();
+    }
+
+    function drawBricks() {
+        for (let c = 0; c < brickColumnCount; c++) {
+            for (let r = 0; r < brickRowCount; r++) {
+                if (bricks[c][r].status === 1) {
+                    let brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
+                    let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
+                    bricks[c][r].x = brickX;
+                    bricks[c][r].y = brickY;
+                    ctx.beginPath();
+                    ctx.rect(brickX, brickY, brickWidth, brickHeight);
+                    
+                    if (r === 0) ctx.fillStyle = "#ff5722";
+                    else if (r === 1) ctx.fillStyle = "#ff9800";
+                    else if (r === 2) ctx.fillStyle = "#ffeb3b";
+                    else ctx.fillStyle = "#4caf50";
+
+                    ctx.fill();
+                    ctx.closePath();
+                }
+            }
+        }
+    }
+
+    function drawHUD() {
+        ctx.textAlign = "left";
+        ctx.font = "14px Arial";
+        ctx.fillStyle = "#aaa";
+        ctx.fillText("Mode: " + currentDifficulty, 15, 23);
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#fff";
+        ctx.fillText("Score: " + score, canvas.width - 15, 23);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (gameState === "MENU") {
+            drawMenu();
+        } else if (gameState === "PLAYING") {
+            drawBricks();
+            drawBall();
+            drawPaddle();
+            drawHUD();
+            collisionDetection();
+
+            if (x + dx > canvas.width - ballRadius || x + dx < ballRadius) dx = -dx;
+            if (y + dy < ballRadius) dy = -dy;
+            else if (y + dy > canvas.height - ballRadius) {
+                if (x > paddleX && x < paddleX + paddleWidth) {
+                    let relativeHit = x - (paddleX + paddleWidth/2);
+                    dx = relativeHit * 0.15;
+                    dy = -dy;
+                } else {
+                    gameState = "GAMEOVER";
+                }
+            }
+            x += dx;
+            y += dy;
+        } else if (gameState === "GAMEOVER") {
+            ctx.textAlign = "center";
+            ctx.font = "24px Arial";
+            ctx.fillStyle = "#F44336";
+            ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 10);
+            ctx.font = "14px Arial";
+            ctx.fillStyle = "#fff";
+            ctx.fillText("Tap screen to return to Menu", canvas.width / 2, canvas.height / 2 + 25);
+        } else if (gameState === "WIN") {
+            ctx.textAlign = "center";
+            ctx.font = "24px Arial";
+            ctx.fillStyle = "#4CAF50";
+            ctx.fillText("LEVEL CLEARED!", canvas.width / 2, canvas.height / 2 - 10);
+            ctx.font = "14px Arial";
+            ctx.fillStyle = "#fff";
+            ctx.fillText("Tap screen to return to Menu", canvas.width / 2, canvas.height / 2 + 25);
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    draw();
+</script>
+
+</body>
+</html>
